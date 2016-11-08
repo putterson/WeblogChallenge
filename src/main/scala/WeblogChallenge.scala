@@ -16,8 +16,8 @@ object WeblogChallenge {
   //Structure of elb access log entries
   case class LogEntry(timestamp: Timestamp,
                       elb: String,
-                      client_port: String,
-                      backend_port: String,
+                      client_ipport: String,
+                      backend_ipport: String,
                       request_processing_time: Double,
                       backend_processing_time: Double,
                       response_processing_time: Double,
@@ -28,7 +28,8 @@ object WeblogChallenge {
                       request: String,
                       user_agent: String,
                       ssl_cipher: String,
-                      ssl_protocol: String)
+                      ssl_protocol: String,
+                      client_ip: String)
 
   val IP_IDX = 2;
   val DATETIME_IDX = 1;
@@ -43,11 +44,16 @@ object WeblogChallenge {
     import org.apache.spark.sql.catalyst.ScalaReflection
     val logSchema = ScalaReflection.schemaFor[LogEntry].dataType.asInstanceOf[StructType]
 
-    val logDataSet = ss.read
+    val logDataFrame = ss.read
       .option("delimiter", " ")
       .option("header", "false")
       .schema(logSchema)
-      .csv(logFile).as[LogEntry]
+      .csv(logFile)
+
+    import org.apache.spark.sql.functions._
+    val parseIP = udf((ipport : String) => ipport.split(":")(0))
+
+    val logDataSet = logDataFrame.withColumn("client_ip", parseIP(col("client_ipport"))).as[LogEntry]
 
     logDataSet.show()
   }
