@@ -41,7 +41,9 @@ object WeblogChallenge {
   val DATETIME_IDX = 1;
 
   //This threshold is in milliseconds
-  val TIME_THRESHOLD = 15 * 60 * 1000; //Fifteen minutes between requests mean they are in the same session
+  val TIME_THRESHOLD = 15 * 60 * 1000;
+
+  //Fifteen minutes between requests mean they are in the same session
 
 
   case class Session(client_ip: String,
@@ -53,7 +55,7 @@ object WeblogChallenge {
 
   def main(args: Array[String]): Unit = {
     val logFile = "/home/patcgoe/Workspace/WeblogChallenge/data/2015_07_22_mktplace_shop_web_log_sample.log" // Should be some file on your system
-//    val logFile = "/home/patcgoe/Workspace/WeblogChallenge/data/small.log" // Should be some file on your system
+    //    val logFile = "/home/patcgoe/Workspace/WeblogChallenge/data/small.log" // Should be some file on your system
     val conf = new SparkConf().setAppName("Weblog Challenge Application").setMaster("local[8]")
     val sc = new SparkContext(conf)
     val ss = SparkSession.builder().config(conf).getOrCreate()
@@ -119,21 +121,26 @@ object WeblogChallenge {
 
     //Goal 1. aggregated holds a list of Session objects, each representing one contiguous session of client activity
     val aggregated = sortedRDD.aggregate(List[Session]())(mergeEntryIntoSessions, _ ++ _)
-    val aggregatedRDD = sc.parallelize(aggregated);
+    val aggregatedRDD = sc.parallelize(aggregated)
+    aggregatedRDD.toDF().write.json("data/goal1.json")
 
     //Goal 2.
-    val countAndTime = aggregatedRDD.aggregate((0D, 0D))((t, s) => (t._1+1, t._2+(s.end_timestamp.getTime - s.start_timestamp.getTime)), (t1, t2) => (t1._1 + t2._1, t1._2 + t2._2))
-    val averageSessionTimeInSeconds : Double = (countAndTime._2 / countAndTime._1) / 1000D
-    println(s"The mean session time in seconds is $averageSessionTimeInSeconds%.2d")
+    val countAndTime = aggregatedRDD.aggregate((0D, 0D))((t, s) => (t._1 + 1, t._2 + (s.end_timestamp.getTime - s.start_timestamp.getTime)), (t1, t2) => (t1._1 + t2._1, t1._2 + t2._2))
+    val averageSessionTimeInSeconds: Double = (countAndTime._2 / countAndTime._1) / 1000D
+    println(f"Goal 2: The mean session time in seconds is $averageSessionTimeInSeconds%.2f")
 
     //Goal 3.
     val sessionRequestSets = aggregatedRDD.map((s) => (s, s.entries.map((e) => e.request).toSet.size))
+    sessionRequestSets.toDF().write.json("data/goal3.json")
 
     //Goal 4.
-    //Need to define ordering on (Long, Session) still
-//    val topTenSessions = aggregatedRDD.map((s) => (s.end_timestamp.getTime - s.start_timestamp.getTime, s)).top(10)
-//    println(topTenSessions)
+    implicit object SessionLengthTupleOrd extends math.Ordering[(Long, Session)] {
+      def compare(x: (Long, Session), y: (Long, Session)): Int = {
+        x._1.compare(y._1);
+      }
+    }
 
-//    aggregated.toDS().show(truncate = false)//.write.json("/home/patcgoe/Workspace/WeblogChallenge/data/output.json")
+    val topTenSessions = aggregatedRDD.map((s) => (s.end_timestamp.getTime - s.start_timestamp.getTime, s)).top(10)
+    sc.parallelize(topTenSessions).toDF().write.json("data/goal4.json")
   }
 }
