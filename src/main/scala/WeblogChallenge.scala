@@ -89,7 +89,7 @@ object WeblogChallenge {
       implicit def timeStampOrdering: Ordering[Timestamp] = Ordering.fromLessThan(_ before _)
       session.copy(
         start_timestamp = (session.start_timestamp :: entry.timestamp :: Nil).min,
-        end_timestamp = (session.start_timestamp :: entry.timestamp :: Nil).max,
+        end_timestamp = (session.end_timestamp :: entry.timestamp :: Nil).max,
         entries = entry :: session.entries);
     }
 
